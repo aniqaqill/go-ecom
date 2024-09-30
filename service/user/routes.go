@@ -7,6 +7,7 @@ import (
 	"github.com/aniqaqill/go-ecom/service/auth"
 	"github.com/aniqaqill/go-ecom/types"
 	"github.com/aniqaqill/go-ecom/utils"
+	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
 )
 
@@ -32,6 +33,14 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var payload types.RegisterUserPayload
 	if err := utils.ParseJSON(r, &payload); err != nil {
 		utils.WriteError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	//validate the payload use package validator
+	if err := utils.Validate.Struct(payload); err != nil {
+		errors := err.(validator.ValidationErrors)
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("validation failed on field %s", errors[0].Field()))
+		return
 	}
 
 	// validate JSON payload , check if user exist in DB if it doesnt we create the new user
