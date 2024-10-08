@@ -10,3 +10,12 @@ test:
 .PHONY: clean
 clean:
 	kill -9 $$(lsof -t -i :8080)
+
+migration:
+	@migrate create -ext sql -dir cmd/migrate/migrations $(filter-out $@,$(MAKECMDGOALS))
+
+migrate-up:
+	@go run cmd/migrate/main.go up
+
+migrate-down:
+	@go run cmd/migrate/main.go down
