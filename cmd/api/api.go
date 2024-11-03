@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/aniqaqill/go-ecom/service/product"
 	"github.com/aniqaqill/go-ecom/service/user"
 	"github.com/gorilla/mux"
 )
@@ -28,6 +29,10 @@ func (s *APIServer) Run() error {
 	userStore := user.NewStore(s.db)
 	userHandler := user.NewHandler(userStore)
 	userHandler.RegisterRoutes(subrouter)
+
+	ProductStore := product.NewStore(s.db)
+	ProductHandler := product.NewHandler(ProductStore)
+	ProductHandler.RegisterRoutes(subrouter)
 
 	log.Println("Server is running on", s.addr)
 
