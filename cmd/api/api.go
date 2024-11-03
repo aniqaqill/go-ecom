@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/aniqaqill/go-ecom/service/cart"
+	"github.com/aniqaqill/go-ecom/service/order"
 	"github.com/aniqaqill/go-ecom/service/product"
 	"github.com/aniqaqill/go-ecom/service/user"
 	"github.com/gorilla/mux"
@@ -30,11 +32,19 @@ func (s *APIServer) Run() error {
 	userHandler := user.NewHandler(userStore)
 	userHandler.RegisterRoutes(subrouter)
 
-	ProductStore := product.NewStore(s.db)
-	ProductHandler := product.NewHandler(ProductStore)
-	ProductHandler.RegisterRoutes(subrouter)
+	productStore := product.NewStore(s.db)
+	productHandler := product.NewHandler(productStore, userStore)
+	productHandler.RegisterRoutes(subrouter)
 
-	log.Println("Server is running on", s.addr)
+	orderStore := order.NewStore(s.db)
+
+	cartHandler := cart.NewHandler(productStore, orderStore, userStore)
+	cartHandler.RegisterRoutes(subrouter)
+
+	// Serve static files
+	router.PathPrefix("/").Handler(http.FileServer(http.Dir("static")))
+
+	log.Println("Listening on", s.addr)
 
 	return http.ListenAndServe(s.addr, router)
 }

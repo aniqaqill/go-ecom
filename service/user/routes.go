@@ -3,6 +3,7 @@ package user
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/aniqaqill/go-ecom/config"
 	"github.com/aniqaqill/go-ecom/service/auth"
@@ -23,32 +24,32 @@ func NewHandler(store types.UserStore) *Handler {
 func (h *Handler) RegisterRoutes(router *mux.Router) {
 	router.HandleFunc("/login", h.handleLogin).Methods("POST")
 	router.HandleFunc("/register", h.handleRegister).Methods("POST")
+
+	// admin routes
+	router.HandleFunc("/users/{userID}", auth.WithJWTAuth(h.handleGetUser, h.store)).Methods(http.MethodGet)
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	// Handle login
-	// get JSON payload
-	var payload types.LoginUserPayload
-	if err := utils.ParseJSON(r, &payload); err != nil {
+	var user types.LoginUserPayload
+	if err := utils.ParseJSON(r, &user); err != nil {
 		utils.WriteError(w, http.StatusBadRequest, err)
 		return
 	}
 
-	//validate the payload use package validator
-	if err := utils.Validate.Struct(payload); err != nil {
+	if err := utils.Validate.Struct(user); err != nil {
 		errors := err.(validator.ValidationErrors)
-		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("validation failed on field %s", errors[0].Field()))
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid payload: %v", errors))
 		return
 	}
 
-	u, err := h.store.GetUserByEmail(payload.Email)
+	u, err := h.store.GetUserByEmail(user.Email)
 	if err != nil {
-		utils.WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid email or password"))
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("not found, invalid email or password"))
 		return
 	}
 
-	if !auth.ComparePasswords(u.Password, payload.Password) {
-		utils.WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid email or password"))
+	if !auth.ComparePasswords(u.Password, []byte(user.Password)) {
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid email or password"))
 		return
 	}
 
@@ -63,44 +64,65 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
-	// get JSON payload
-	var payload types.RegisterUserPayload
-	if err := utils.ParseJSON(r, &payload); err != nil {
+	var user types.RegisterUserPayload
+	if err := utils.ParseJSON(r, &user); err != nil {
 		utils.WriteError(w, http.StatusBadRequest, err)
 		return
 	}
 
-	//validate the payload use package validator
-	if err := utils.Validate.Struct(payload); err != nil {
+	if err := utils.Validate.Struct(user); err != nil {
 		errors := err.(validator.ValidationErrors)
-		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("validation failed on field %s", errors[0].Field()))
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid payload: %v", errors))
 		return
 	}
 
-	// validate JSON payload , check if user exist in DB if it doesnt we create the new user
-	_, err := h.store.GetUserByEmail(payload.Email)
+	// check if user exists
+	_, err := h.store.GetUserByEmail(user.Email)
 	if err == nil {
-		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("user with email %s already exists", payload.Email))
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("user with email %s already exists", user.Email))
 		return
 	}
 
-	hashedPassword, err := auth.HashPassword(payload.Password)
+	// hash password
+	hashedPassword, err := auth.HashPassword(user.Password)
 	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
 
-	// if it doenst we create the new user and return the user havent implemented the password hashing yet
 	err = h.store.CreateUser(types.User{
-		FirstName: payload.FirstName,
-		LastName:  payload.LastName,
-		Email:     payload.Email,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Email:     user.Email,
 		Password:  hashedPassword,
 	})
-
 	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
+
 	utils.WriteJSON(w, http.StatusCreated, nil)
+}
+
+func (h *Handler) handleGetUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	str, ok := vars["userID"]
+	if !ok {
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("missing user ID"))
+		return
+	}
+
+	userID, err := strconv.Atoi(str)
+	if err != nil {
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid user ID"))
+		return
+	}
+
+	user, err := h.store.GetUserByID(userID)
+	if err != nil {
+		utils.WriteError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	utils.WriteJSON(w, http.StatusOK, user)
 }
